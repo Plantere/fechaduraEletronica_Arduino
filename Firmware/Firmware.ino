@@ -6,11 +6,12 @@
 #include "Keypad.h"
 #include <LiquidCrystal_I2C.h>
 #include <ArduinoJson.h>
+#include <HTTPClient.h>
 
 #define WIFI_SSID "Plantere"
 #define WIFI_PASSWORD "benficatorres"
-#define FIREBASE_HOST "https://door-security-43ae7-default-rtdb.firebaseio.com"
-#define FIREBASE_AUTH "Fq4ggji0Q5oTVPcJSQQLwMuPMG7d7CALKutu9chN"
+#define FIREBASE_HOST "https://projetosvii-default-rtdb.firebaseio.com"
+#define FIREBASE_AUTH "BFWdbTcC5c3Y8W3zeOjeD4j3OGb6CrEvdqpBn1q9"
 
 Usuario usuarios[10];
 Keypad keypad(KEYPAD_PIN_COL1, KEYPAD_PIN_COL2, KEYPAD_PIN_COL3, KEYPAD_PIN_ROW1, KEYPAD_PIN_ROW2, KEYPAD_PIN_ROW3, KEYPAD_PIN_ROW4);
@@ -66,7 +67,7 @@ bool createUser(int type);
 void removeAllUsers();
 void getAllUsers(StaticJsonDocument<768> doc);
 bool loginUser();
-
+StaticJsonDocument<384> getTimestamp();
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
@@ -106,7 +107,7 @@ void loop() {
   }else if(utilitarioSistema.usuarioLogado == true && usuarioLogado.tipoUsuario == 1){
     showMenu();
   }
-  delay(2000);
+  delay(5000);
 }
 
 
@@ -125,6 +126,7 @@ void beginLCD(){
 
 void beginRelay(){
   pinMode(RELAYMODULE_PIN_SIGNAL, OUTPUT);
+  digitalWrite(RELAYMODULE_PIN_SIGNAL, HIGH);
 }
 
 void beginKeypad(){
@@ -149,7 +151,11 @@ void connectToFirebase(){
   Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH);
 
   Firebase.stream("", [](FirebaseStream stream) {
-    if (stream.getEvent() == "put" && stream.getPath() == "/Door/isOpened") {
+    Serial.println(stream.getPath());
+    Serial.println(stream.getEvent());
+    if (stream.getEvent() == "put" && stream.getPath() == "/isOpen") {
+      Serial.println("Entrou...");
+      Serial.println(stream.getDataBool());
       handleRelay(stream.getDataBool());
     }else if(stream.getEvent() == "put" && stream.getPath() == "/"){
       StaticJsonDocument<768> doc;
@@ -197,7 +203,7 @@ char* readData(const char *title, char *data, int maxLength) {
 }
 
 void handleRelay(bool isActive){
-  digitalWrite(RELAYMODULE_PIN_SIGNAL, isActive == true ? HIGH : LOW);
+  digitalWrite(RELAYMODULE_PIN_SIGNAL, isActive == true ? LOW : HIGH);
 }
 
 void showMessage(const char* message){
@@ -222,7 +228,7 @@ void showOptionsMenu() {
 }
 
 void getAllUsers(StaticJsonDocument<768> doc){
-  int totalUsers = doc["Users"]["totalUsers"];
+  int totalUsers = doc["users"]["totalUsers"];
   utilitarioSistema.numeroUsuario = totalUsers;
   Serial.print("totalUsers: ");
   Serial.println(totalUsers);
@@ -232,9 +238,9 @@ void getAllUsers(StaticJsonDocument<768> doc){
   int type;
 
   for(int index = 0; index < totalUsers; index++){
-    username = doc["Users"][String(index+1)]["username"];
-    password = doc["Users"][String(index+1)]["password"];
-    type = doc["Users"][String(index+1)]["type"];
+    username = doc["users"][String(index+1)]["username"];
+    password = doc["users"][String(index+1)]["password"];
+    type = doc["users"][String(index+1)]["type"];
 
     strncpy(usuarios[index].identificador, String(username).c_str(), sizeof(usuarios[index].identificador) - 1);
     strncpy(usuarios[index].senha, String(password).c_str(), sizeof(usuarios[index].senha) - 1);
@@ -246,9 +252,9 @@ void getAllUsers(StaticJsonDocument<768> doc){
 }
 
 bool storeUser(const char *username, const char *password, int type){
-  int newId = Firebase.getInt("/Users/totalUsers") + 1;
+  int newId = Firebase.getInt("/users/totalUsers") + 1;
 
-  String basePath = "/Users/" + String(newId);
+  String basePath = "/users/" + String(newId);
 
   StaticJsonDocument<768> newUser;
   newUser["username"] = username;
@@ -256,7 +262,7 @@ bool storeUser(const char *username, const char *password, int type){
   newUser["type"] = type;
   Firebase.set(basePath, newUser);
 
-  Firebase.setInt("/Users/totalUsers", newId);
+  Firebase.setInt("/users/totalUsers", newId);
   utilitarioSistema.numeroUsuario = newId;
 
   strncpy(usuarios[newId-1].identificador, String(username).c_str(), sizeof(usuarios[newId-1].identificador) - 1);
@@ -292,8 +298,8 @@ bool checkPassword(const char* username, const char* password) {
 }
 
 void removeAllUsers() {
-  Firebase.setString("/Users", "");
-  Firebase.setInt("/Users/totalUsers", 0);
+  Firebase.setString("/users", "");
+  Firebase.setInt("/users/totalUsers", 0);
 }
 
 void factoryReset(){
@@ -469,7 +475,34 @@ void configurateMenu(bool isActive) {
     utilitarioSistema.menuAlterado = false;
 }
 
+void createLog(){
+  StaticJsonDocument<384> doc = getTimestamp();
+  StaticJsonDocument<300> newLog;
+  StaticJsonDocument<1000> history = Firebase.get("History/");
+  newLog["datetime"] = doc["datetime"];
+  newLog["username"] = usuarioLogado.identificador;
+  Firebase.set("History/"+String(history.size()), newLog);
+}
+
+StaticJsonDocument<384> getTimestamp(){
+  HTTPClient http;
+  http.begin("http://worldtimeapi.org/api/timezone/America/Sao_Paulo");
+  int httpResponseCode = http.GET();
+  StaticJsonDocument<384> doc;
+  if (httpResponseCode>0) {
+    String payload = http.getString();
+    deserializeJson(doc, payload);
+  }
+  else {
+    Serial.print("Error code: ");
+    Serial.println(httpResponseCode);
+  }
+
+  return doc;
+}
+
 void enableDoor(){
+  createLog();
   showMessage("< Aberto >");
   handleRelay(true);
   delay(5000);
