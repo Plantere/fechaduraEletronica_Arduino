@@ -10,163 +10,168 @@
 #include "IOXhop_FirebaseESP32.h"
 
 FirebaseESP32::FirebaseESP32() {
-	// not use
+    // not use
 }
 
 void FirebaseESP32::begin(String host) {
-	begin(host, "");
+    begin(host, "");
 }
 
 void FirebaseESP32::begin(String host, String auth) {
-	host.replace("https:", "");
-	host.replace("/", "");
-	_host = host;
-	_auth = auth;
+    host.replace("https:", "");
+    host.replace("/", "");
+    _host = host;
+    _auth = auth;
 }
 
 // Start of get
 int FirebaseESP32::getInt(String path) {
-	return _http(path, "GET").toInt();
+    return _http(path, "GET").toInt();
 }
 
 float FirebaseESP32::getFloat(String path) {
-	return _http(path, "GET").toFloat();
+    return _http(path, "GET").toFloat();
 }
 
 String FirebaseESP32::getString(String path) {
-	String value = _http(path, "GET");
-	return value.substring(1, value.length() - 1);
+    String value = _http(path, "GET");
+    return value.substring(1, value.length() - 1);
 }
 
 bool FirebaseESP32::getBool(String path) {
-	return _http(path, "GET").indexOf("true") >= 0;
+    return _http(path, "GET").indexOf("true") >= 0;
 }
 
 void FirebaseESP32::get(String path, int &value) {
-	value = getInt(path);
+    value = getInt(path);
 }
 
 void FirebaseESP32::get(String path, float &value) {
-	value = getFloat(path);
+    value = getFloat(path);
 }
 
 void FirebaseESP32::get(String path, String &value) {
-	value = getString(path);
+    value = getString(path);
 }
 
 void FirebaseESP32::get(String path, bool &value) {
-	value = getBool(path);
+    value = getBool(path);
 }
 
 JsonVariant FirebaseESP32::get(String path) {
-	return StaticJsonBuffer<FIREBASE_JSON_VALUE_BUFFER_SIZE>().parseObject(_http(path, "GET"));
+    DynamicJsonDocument document(FIREBASE_JSON_VALUE_BUFFER_SIZE);
+    deserializeJson(document, _http(path, "GET"));
+    return document.as<JsonVariant>();
 }
 // END of get
 
 // Start of set
 void FirebaseESP32::setInt(String path, int value) {
-	set(path, (int)value);
+    set(path, (int)value);
 }
 
 void FirebaseESP32::setFloat(String path, float value, int point) {
-	set(path, (float)value);
+    set(path, (float)value);
 }
 
 void FirebaseESP32::setString(String path, String value) {
-	set(path, (String)value);
+    set(path, (String)value);
 }
 
 void FirebaseESP32::setBool(String path, bool value) {
-	set(path, (bool)value);
+    set(path, (bool)value);
 }
 
 void FirebaseESP32::set(String path, int value) {
-	_http(path, "PUT", String(value));
+    _http(path, "PUT", String(value));
 }
 
 void FirebaseESP32::set(String path, float value, int point) {
-	_http(path, "PUT", String(value, point));
+    _http(path, "PUT", String(value, point));
 }
 
 void FirebaseESP32::set(String path, String value) {
-	String buf = "";
-	JsonVariant(value.c_str()).printTo(buf);
-	_http(path, "PUT", buf);
+    DynamicJsonDocument document(1024);
+    document["value"] = value;
+    String buf;
+    serializeJson(document, buf);
+    _http(path, "PUT", buf);
 }
 
 void FirebaseESP32::set(String path, bool value) {
-	_http(path, "PUT", value ? "true" : "false");
+    _http(path, "PUT", value ? "true" : "false");
 }
 
 void FirebaseESP32::set(String path, JsonVariant value) {
-	String bufferJson = "";
-	JsonObject& data = value;
-	data.printTo(bufferJson);
-	_http(path, "PUT", bufferJson);
+    String bufferJson;
+    serializeJson(value, bufferJson);
+    _http(path, "PUT", bufferJson);
 }
 // END of set
 
 // Start of push
 String FirebaseESP32::pushInt(String path, int value) {
-	return push(path, value);
+    return push(path, value);
 }
 
 String FirebaseESP32::pushFloat(String path, float value, int point) {
-	return push(path, value);
+    return push(path, value);
 }
 
 String FirebaseESP32::pushBool(String path, bool value) {
-	return push(path, value);
+    return push(path, value);
 }
 
 String FirebaseESP32::pushString(String path, String value) {
-	return push(path, value);
+    return push(path, value);
 }
 
 String FirebaseESP32::push(String path, int value) {
-	return _pushValue(path, String(value));
+    return _pushValue(path, String(value));
 }
 
 String FirebaseESP32::push(String path, float value, int point) {
-	return _pushValue(path, String(value, point));
+    return _pushValue(path, String(value, point));
 }
 
 String FirebaseESP32::push(String path, String value) {
-	String buf;
-	JsonVariant(value.c_str()).printTo(buf);
-	return _pushValue(path, buf);
+    DynamicJsonDocument document(1024);
+    document["value"] = value;
+    String buf;
+    serializeJson(document, buf);
+    return _pushValue(path, buf);
 }
 
 String FirebaseESP32::push(String path, bool value) {
-	return _pushValue(path, value ? "true" : "false");
+    return _pushValue(path, value ? "true" : "false");
 }
 
 String FirebaseESP32::push(String path, JsonVariant value) {
-	String bufferJson = "";
-	JsonObject& data = value;
-	data.printTo(bufferJson);
-	return _pushValue(path, bufferJson);
+    String bufferJson;
+    serializeJson(value, bufferJson);
+    return _pushValue(path, bufferJson);
 }
 
 String FirebaseESP32::_pushValue(String path, String data) {
-	String rosJson = _http(path, "POST", data);
-	if (failed()) return String();
-	
-	StaticJsonBuffer<FIREBASE_RETUEN_JSON_BUFFER_SIZE> jsonBuffer;
-	JsonObject& root = jsonBuffer.parseObject(rosJson);
-	if (!root.success()) {
-		_errCode = 1;
-		_errMsg = "firebase not respond json formant, parseObject() failed";
-		return String();
-	}
-	
-	if (!root.containsKey("name")) {
-		_errCode = 2;
-		_errMsg = "firebase not respond 'name' for object";
-		return String();
-	}
-	
-	return root["name"].as<String>();
+    String rosJson = _http(path, "POST", data);
+    if (failed()) return String();
+    
+    DynamicJsonDocument jsonBuffer(FIREBASE_RETUEN_JSON_BUFFER_SIZE);
+    deserializeJson(jsonBuffer, rosJson);
+    JsonObject root = jsonBuffer.as<JsonObject>();
+    if (!root) {
+        _errCode = 1;
+        _errMsg = "firebase not respond json formant, parseObject() failed";
+        return String();
+    }
+    
+    if (!root.containsKey("name")) {
+        _errCode = 2;
+        _errMsg = "firebase not respond 'name' for object";
+        return String();
+    }
+    
+    return root["name"].as<String>();
 }
 // END of push
 

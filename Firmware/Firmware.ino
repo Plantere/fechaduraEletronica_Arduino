@@ -15,6 +15,7 @@
 Usuario usuarios[10];
 Keypad keypad(KEYPAD_PIN_COL1, KEYPAD_PIN_COL2, KEYPAD_PIN_COL3, KEYPAD_PIN_ROW1, KEYPAD_PIN_ROW2, KEYPAD_PIN_ROW3, KEYPAD_PIN_ROW4);
 Utilitario utilitarioSistema = {false, false, true, false, 0, 0};
+Usuario usuarioLogado;
 
 char keypadkeys[ROWS][COLS] = {
     {
@@ -63,7 +64,7 @@ bool checkUsername(const char* username);
 bool checkPassword(const char* username, const char* password);
 bool createUser(int type);
 void removeAllUsers();
-void getAllUsers();
+void getAllUsers(StaticJsonDocument<768> doc);
 bool loginUser();
 
 
@@ -79,15 +80,43 @@ void setup() {
 
   connectToWifi();
   connectToFirebase();
-  getAllUsers();
 }
 
 void loop() {
-  showMenu();
-  delay(1000);
+  utilitarioSistema.usuarioLogado = false;
+
+  if(!utilitarioSistema.sistemaIniciado){
+    showMessage("< Pressione >");
+    startSystem();
+  }
+
+  if(utilitarioSistema.numeroUsuario <= 0) {
+    showMessage("< Registro >");
+      delay(500);
+      createUser(1);
+      if(utilitarioSistema.numeroUsuario > 0){
+        showMenu();
+      }
+  }else{
+    while(!loginUser());
+  }
+
+  if(utilitarioSistema.usuarioLogado == true && usuarioLogado.tipoUsuario == 0){
+    enableDoor();
+  }else if(utilitarioSistema.usuarioLogado == true && usuarioLogado.tipoUsuario == 1){
+    showMenu();
+  }
+  delay(2000);
 }
 
 
+void startSystem(){
+   do{
+      if(readKeypadEntry()){
+         utilitarioSistema.sistemaIniciado = true;
+      }
+   }while(!utilitarioSistema.sistemaIniciado);
+}
 
 void beginLCD(){
   lcd.init();
@@ -120,11 +149,12 @@ void connectToFirebase(){
   Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH);
 
   Firebase.stream("", [](FirebaseStream stream) {
-    Serial.println(stream.getEvent());
-    Serial.println(stream.getPath());
-    Serial.println(stream.getDataString());
     if (stream.getEvent() == "put" && stream.getPath() == "/Door/isOpened") {
       handleRelay(stream.getDataBool());
+    }else if(stream.getEvent() == "put" && stream.getPath() == "/"){
+      StaticJsonDocument<768> doc;
+      deserializeJson(doc, stream.getDataString());
+      getAllUsers(doc);
     }
   });
   Serial.println("==== Conexão realizada com sucesso com o Firebase ====");
@@ -191,13 +221,24 @@ void showOptionsMenu() {
   }
 }
 
-void getAllUsers(){
-  int totalUsers = Firebase.getInt("/Users/totalUsers");
+void getAllUsers(StaticJsonDocument<768> doc){
+  int totalUsers = doc["Users"]["totalUsers"];
+  utilitarioSistema.numeroUsuario = totalUsers;
+  Serial.print("totalUsers: ");
+  Serial.println(totalUsers);
 
-  for(int index = 1; index <= totalUsers; index++){
-    strncpy(usuarios[index].identificador, Firebase.getString("/Users/" + String(index) + "/username").c_str(), sizeof(usuarios[index].identificador) - 1);
-    strncpy(usuarios[index].senha, Firebase.getString("/Users/" + String(index) + "/password").c_str(), sizeof(usuarios[index].senha) - 1);
-    usuarios[index].tipoUsuario = Firebase.getInt("/Users/" + String(index) + "/type");
+  int username;
+  int password;
+  int type;
+
+  for(int index = 0; index < totalUsers; index++){
+    username = doc["Users"][String(index+1)]["username"];
+    password = doc["Users"][String(index+1)]["password"];
+    type = doc["Users"][String(index+1)]["type"];
+
+    strncpy(usuarios[index].identificador, String(username).c_str(), sizeof(usuarios[index].identificador) - 1);
+    strncpy(usuarios[index].senha, String(password).c_str(), sizeof(usuarios[index].senha) - 1);
+    usuarios[index].tipoUsuario = type;
 
     usuarios[index].identificador[sizeof(usuarios[index].identificador) - 1] = '\0';
     usuarios[index].senha[sizeof(usuarios[index].senha) - 1] = '\0';
@@ -208,14 +249,22 @@ bool storeUser(const char *username, const char *password, int type){
   int newId = Firebase.getInt("/Users/totalUsers") + 1;
 
   String basePath = "/Users/" + String(newId);
-  Firebase.setString(basePath + "/username", username);
-  Firebase.setString(basePath + "/password", password);
-  Firebase.setInt(basePath + "/type", type);
+
+  StaticJsonDocument<768> newUser;
+  newUser["username"] = username;
+  newUser["password"] = password;
+  newUser["type"] = type;
+  Firebase.set(basePath, newUser);
 
   Firebase.setInt("/Users/totalUsers", newId);
+  utilitarioSistema.numeroUsuario = newId;
 
-  getAllUsers();
+  strncpy(usuarios[newId-1].identificador, String(username).c_str(), sizeof(usuarios[newId-1].identificador) - 1);
+  strncpy(usuarios[newId-1].senha, String(password).c_str(), sizeof(usuarios[newId-1].senha) - 1);
+  usuarios[newId-1].tipoUsuario = type;
 
+  usuarios[newId-1].identificador[sizeof(usuarios[newId-1].identificador) - 1] = '\0';
+  usuarios[newId-1].senha[sizeof(usuarios[newId-1].senha) - 1] = '\0';
   return true;
 }
 
@@ -232,6 +281,8 @@ bool checkPassword(const char* username, const char* password) {
     for (int i = 0; i < 10; i++) {
         if (strcmp(usuarios[i].identificador, username) == 0) {
             if (strcmp(usuarios[i].senha, password) == 0) {
+                usuarioLogado = usuarios[i];
+                utilitarioSistema.usuarioLogado = true;
                 return true;
             }
             break;
@@ -245,10 +296,21 @@ void removeAllUsers() {
   Firebase.setInt("/Users/totalUsers", 0);
 }
 
-bool removeByUsername(const char* username){ 
+void factoryReset(){
+  showMessage("< Resetando >");
+  removeAllUsers();
+}
+
+bool removeByUsername(){ 
+  char username[5];
+
+  readData("ID: ", username, 5);
   if(!checkUsername(username)){
+    showMessage("< Inexistente >");
     return false;
   }
+
+  showMessage("< Deletando >");
 
   removeAllUsers();
 
@@ -267,7 +329,6 @@ bool removeByUsername(const char* username){
 
     storeUser(usuarios[i].identificador, usuarios[i].senha, usuarios[i].tipoUsuario);
   }
-
   return true;
 }
 
@@ -297,7 +358,9 @@ bool createUser(int type){
     readData("ID: ", username, 5);
   }
 
- readData("Senha: ", password, 5);
+  readData("Senha: ", password, 5);
+
+  showMessage("< Criando... >");
 
   return storeUser(username, password, type);
 }
@@ -333,13 +396,63 @@ void updateOptionActual(char character) {
     }
 }
 
+void searchUser() {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Usuarios");
+
+    int usuarioAtual = 0;
+
+    if (utilitarioSistema.numeroUsuario == 0) {
+        lcd.setCursor(0, 1);
+        lcd.print("< Nenhum >");
+        delay(2000);
+        return;
+    }
+
+    showUser(usuarioAtual);
+    char comando = 0;
+
+    while (true) {
+        comando = 0;
+        while (comando == 0) {
+            comando = keypad.getKey();
+            delay(1);
+        }
+
+        if (comando == '4' && usuarioAtual > 0) {
+            usuarioAtual -= 1;
+        } else if (comando == '*') {
+            return;
+        } else if (comando == '6' && usuarioAtual < utilitarioSistema.numeroUsuario - 1) {
+            usuarioAtual += 1;
+        } else {
+            continue;
+        }
+
+        showUser(usuarioAtual);
+    }
+}
+
+void showUser(int userId) {
+    lcd.setCursor(0, 1);
+    lcd.print("<");
+    for (int i = 0; i < 4; i++) {
+        lcd.setCursor(0 + (i + 1), 1);
+        lcd.print(usuarios[userId].identificador[i]);
+    }
+
+    lcd.setCursor(5, 1);
+    lcd.print(">");
+}
+
 void executeActionMenu(char character) {
     if (character == '5') {
         switch (utilitarioSistema.opcaoAtual) {
             case 1: createUser(0); break;
-            case 2: createUser(1); break;
-            case 3: removeByUsername("1234"); break;
-            case 4: removeAllUsers(); break;
+            case 2: searchUser(); break;
+            case 3: removeByUsername(); break;
+            case 4: factoryReset(); break;
             case 5: enableDoor(); break;
             case 6: configurateMenu(false); return;
             default: break;
