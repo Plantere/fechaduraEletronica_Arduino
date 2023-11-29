@@ -59,7 +59,7 @@ void updateOptionActual(char character);
 void executeActionMenu(char character);
 void configurateMenu(bool isActive);
 void showOptionsMenu();
-void enableDoor();
+void enableDoor(bool canCreateLog);
 
 bool storeUser(const char *username, const char *password,int tipoUsuario);
 bool checkUsername(const char* username);
@@ -107,7 +107,7 @@ void loop() {
       }
     
       if(utilitarioSistema.usuarioLogado == true && usuarioLogado.tipoUsuario == 0){
-        enableDoor();
+        enableDoor(true);
       }else if(utilitarioSistema.usuarioLogado == true && usuarioLogado.tipoUsuario == 1){
         showMenu();
       }
@@ -161,8 +161,7 @@ void connectToFirebase(){
     Serial.println(stream.getEvent());
     if (stream.getEvent() == "put" && stream.getPath() == "/isOpen") {
       Serial.println("Entrou...");
-      Serial.println(stream.getDataBool());
-      handleRelay(stream.getDataBool());
+      enableDoor(false);
     }else if(stream.getEvent() == "put" && stream.getPath() == "/"){
       StaticJsonDocument<768> doc;
       deserializeJson(doc, stream.getDataString());
@@ -475,7 +474,7 @@ void executeActionMenu(char character) {
             case 2: searchUser(); break;
             case 3: removeByUsername(); break;
             case 4: factoryReset(); break;
-            case 5: enableDoor(); break;
+            case 5: enableDoor(true); break;
             case 6: configurateMenu(false); return;
             default: break;
         }
@@ -517,8 +516,10 @@ StaticJsonDocument<384> getTimestamp(){
   return doc;
 }
 
-void enableDoor(){
-  createLog();
+void enableDoor(bool canCreateLog){
+  if(canCreateLog){
+    createLog();
+  }
   showMessage("< Aberto >");
   handleRelay(false);
   delay(5000);
