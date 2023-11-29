@@ -8,8 +8,8 @@
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
 
-#define WIFI_SSID "Plantere"
-#define WIFI_PASSWORD "benficatorres"
+#define WIFI_SSID "rangel"
+#define WIFI_PASSWORD "12345678"
 #define FIREBASE_HOST "https://projetosvii-default-rtdb.firebaseio.com"
 #define FIREBASE_AUTH "BFWdbTcC5c3Y8W3zeOjeD4j3OGb6CrEvdqpBn1q9"
 
@@ -82,6 +82,8 @@ void setup() {
 
   connectToWifi();
   connectToFirebase();
+
+  handleRelay(true);
 }
 
 void loop() {
@@ -510,10 +512,10 @@ StaticJsonDocument<384> getTimestamp(){
 void enableDoor(){
   createLog();
   showMessage("< Aberto >");
-  handleRelay(true);
+  handleRelay(false);
   delay(5000);
   showMessage("< Fechado >");
-  handleRelay(false);
+  handleRelay(true);
   delay(5000);
 
   return;
