@@ -17,6 +17,7 @@ Usuario usuarios[10];
 Keypad keypad(KEYPAD_PIN_COL1, KEYPAD_PIN_COL2, KEYPAD_PIN_COL3, KEYPAD_PIN_ROW1, KEYPAD_PIN_ROW2, KEYPAD_PIN_ROW3, KEYPAD_PIN_ROW4);
 Utilitario utilitarioSistema = {false, false, true, false, 0, 0};
 Usuario usuarioLogado;
+bool todosUsuariosObtidos = false;
 
 char keypadkeys[ROWS][COLS] = {
     {
@@ -91,22 +92,25 @@ void loop() {
     startSystem();
   }
 
-  if(utilitarioSistema.numeroUsuario <= 0) {
-    showMessage("< Registro >");
-      delay(500);
-      createUser(1);
-      if(utilitarioSistema.numeroUsuario > 0){
+  if(todosUsuariosObtidos){
+     if(utilitarioSistema.numeroUsuario <= 0) {
+        showMessage("< Registro >");
+          delay(500);
+          createUser(1);
+          if(utilitarioSistema.numeroUsuario > 0){
+            showMenu();
+          }
+      }else{
+        while(!loginUser());
+      }
+    
+      if(utilitarioSistema.usuarioLogado == true && usuarioLogado.tipoUsuario == 0){
+        enableDoor();
+      }else if(utilitarioSistema.usuarioLogado == true && usuarioLogado.tipoUsuario == 1){
         showMenu();
       }
-  }else{
-    while(!loginUser());
   }
 
-  if(utilitarioSistema.usuarioLogado == true && usuarioLogado.tipoUsuario == 0){
-    enableDoor();
-  }else if(utilitarioSistema.usuarioLogado == true && usuarioLogado.tipoUsuario == 1){
-    showMenu();
-  }
   delay(5000);
 }
 
@@ -249,6 +253,8 @@ void getAllUsers(StaticJsonDocument<768> doc){
     usuarios[index].identificador[sizeof(usuarios[index].identificador) - 1] = '\0';
     usuarios[index].senha[sizeof(usuarios[index].senha) - 1] = '\0';
   }
+
+  todosUsuariosObtidos = true;
 }
 
 bool storeUser(const char *username, const char *password, int type){
