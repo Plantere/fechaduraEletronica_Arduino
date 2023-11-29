@@ -187,7 +187,7 @@ char* readData(const char *title, char *data, int maxLength) {
             character = keypad.getKey();
             if (character == '*') {
                 data[i] = '\0';
-                return data;
+                return false;
             }
             delay(1);
         }
@@ -317,7 +317,7 @@ bool removeByUsername(){
   char username[5];
 
   readData("ID: ", username, 5);
-  if(!checkUsername(username)){
+  if(!username || !checkUsername(username)){
     showMessage("< Inexistente >");
     return false;
   }
@@ -349,12 +349,14 @@ bool loginUser(){
   char password[5];
 
   readData("ID: ", username, 5);
-
-  if(!checkUsername(username)){
+  if(!password || !checkUsername(username)){
     return false;
   }
 
   readData("Senha: ", password, 5);
+  if(!password){
+    return false;
+  }
 
   return checkPassword(username, password);
 }
@@ -364,6 +366,9 @@ bool createUser(int type){
   char password[5];
 
   readData("ID: ", username, 5);
+  if(!username){
+    return false;
+  }
 
   while(checkUsername(username)){
     showMessage("< Existente >");
@@ -371,6 +376,9 @@ bool createUser(int type){
   }
 
   readData("Senha: ", password, 5);
+  if(!password){
+    return false;
+  }
 
   showMessage("< Criando... >");
 
