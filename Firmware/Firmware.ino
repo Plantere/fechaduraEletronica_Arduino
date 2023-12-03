@@ -59,7 +59,7 @@ void updateOptionActual(char character);
 void executeActionMenu(char character);
 void configurateMenu(bool isActive);
 void showOptionsMenu();
-void enableDoor();
+void enableDoor(bool canCreateLog);
 
 bool storeUser(const char *username, const char *password,int tipoUsuario);
 bool checkUsername(const char* username);
@@ -107,7 +107,7 @@ void loop() {
       }
     
       if(utilitarioSistema.usuarioLogado == true && usuarioLogado.tipoUsuario == 0){
-        enableDoor();
+        enableDoor(true);
       }else if(utilitarioSistema.usuarioLogado == true && usuarioLogado.tipoUsuario == 1){
         showMenu();
       }
@@ -161,8 +161,7 @@ void connectToFirebase(){
     Serial.println(stream.getEvent());
     if (stream.getEvent() == "put" && stream.getPath() == "/isOpen") {
       Serial.println("Entrou...");
-      Serial.println(stream.getDataBool());
-      handleRelay(stream.getDataBool());
+      enableDoor(false);
     }else if(stream.getEvent() == "put" && stream.getPath() == "/"){
       StaticJsonDocument<768> doc;
       deserializeJson(doc, stream.getDataString());
@@ -189,7 +188,7 @@ char* readData(const char *title, char *data, int maxLength) {
             character = keypad.getKey();
             if (character == '*') {
                 data[i] = '\0';
-                return data;
+                return NULL;
             }
             delay(1);
         }
@@ -319,7 +318,7 @@ bool removeByUsername(){
   char username[5];
 
   readData("ID: ", username, 5);
-  if(!checkUsername(username)){
+  if(username == NULL || !checkUsername(username)){
     showMessage("< Inexistente >");
     return false;
   }
@@ -351,12 +350,14 @@ bool loginUser(){
   char password[5];
 
   readData("ID: ", username, 5);
-
-  if(!checkUsername(username)){
+  if(password == NULL || !checkUsername(username)){
     return false;
   }
 
   readData("Senha: ", password, 5);
+  if(password == NULL){
+    return false;
+  }
 
   return checkPassword(username, password);
 }
@@ -366,6 +367,9 @@ bool createUser(int type){
   char password[5];
 
   readData("ID: ", username, 5);
+  if(username == NULL){
+    return false;
+  }
 
   while(checkUsername(username)){
     showMessage("< Existente >");
@@ -373,6 +377,9 @@ bool createUser(int type){
   }
 
   readData("Senha: ", password, 5);
+  if(password == NULL){
+    return false;
+  }
 
   showMessage("< Criando... >");
 
@@ -467,7 +474,7 @@ void executeActionMenu(char character) {
             case 2: searchUser(); break;
             case 3: removeByUsername(); break;
             case 4: factoryReset(); break;
-            case 5: enableDoor(); break;
+            case 5: enableDoor(true); break;
             case 6: configurateMenu(false); return;
             default: break;
         }
@@ -509,8 +516,10 @@ StaticJsonDocument<384> getTimestamp(){
   return doc;
 }
 
-void enableDoor(){
-  createLog();
+void enableDoor(bool canCreateLog){
+  if(canCreateLog){
+    createLog();
+  }
   showMessage("< Aberto >");
   handleRelay(false);
   delay(5000);
